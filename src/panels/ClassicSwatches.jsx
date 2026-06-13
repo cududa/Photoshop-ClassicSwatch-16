@@ -63,7 +63,7 @@ function getRows(values) {
     return rows;
 }
 
-async function setPhotoshopColor(hex, target) {
+async function setForegroundColor(hex) {
     const photoshop = require("photoshop");
     const { app, core, action } = photoshop;
     const rgb = hexToRgb(hex);
@@ -75,13 +75,8 @@ async function setPhotoshopColor(hex, target) {
                 color.rgb.red = rgb.red;
                 color.rgb.green = rgb.green;
                 color.rgb.blue = rgb.blue;
-
-                if (target === "background") {
-                    app.backgroundColor = color;
-                } else {
-                    app.foregroundColor = color;
-                }
-            }, { commandName: `Classic Swatches: set ${target} color` });
+                app.foregroundColor = color;
+            }, { commandName: "Classic Swatches: set foreground color" });
             return;
         } catch (error) {
             console.warn("SolidColor failed, trying batchPlay", error);
@@ -92,13 +87,11 @@ async function setPhotoshopColor(hex, target) {
         throw new Error("Photoshop color APIs are unavailable");
     }
 
-    const property = target === "background" ? "backgroundColor" : "foregroundColor";
-
     await core.executeAsModal(async () => {
         await action.batchPlay([
             {
                 _obj: "set",
-                _target: [{ _ref: "color", _property: property }],
+                _target: [{ _ref: "color", _property: "foregroundColor" }],
                 to: {
                     _obj: "RGBColor",
                     red: rgb.red,
@@ -107,15 +100,12 @@ async function setPhotoshopColor(hex, target) {
                 }
             }
         ], { synchronousExecution: true, modalBehavior: "fail" });
-    }, { commandName: `Classic Swatches: set ${target} color` });
+    }, { commandName: "Classic Swatches: set foreground color" });
 }
 
 export function ClassicSwatches() {
     const gridRef = useRef(null);
-    const [target, setTarget] = useState("foreground");
-    const [hexInput, setHexInput] = useState(SWATCHES[0]);
     const [swatchSize, setSwatchSize] = useState(12);
-    const [status, setStatus] = useState(`Ready. ${SWATCHES.length} swatches loaded.`);
     const rows = getRows(SWATCHES);
 
     useEffect(() => {
@@ -143,28 +133,19 @@ export function ClassicSwatches() {
         };
     }, []);
 
-    async function applyHex(value) {
+    async function applySwatch(value) {
         const normalized = normalizeHex(value);
 
         if (!normalized) {
-            setStatus("Use a hex color like #00AEEF.");
+            console.warn(`Invalid swatch color: ${value}`);
             return;
         }
 
-        setHexInput(normalized);
-
         try {
-            await setPhotoshopColor(normalized, target);
-            setStatus(`${target === "background" ? "Background" : "Foreground"}: ${normalized}`);
+            await setForegroundColor(normalized);
         } catch (error) {
             console.error(error);
-            setStatus(`Visible, but color set failed: ${error.message || error}`);
         }
-    }
-
-    function changeTarget(nextTarget) {
-        setTarget(nextTarget);
-        setStatus(`Ready. Click a swatch to set Photoshop ${nextTarget} color.`);
     }
 
     return (
@@ -182,7 +163,7 @@ export function ClassicSwatches() {
                                     role="button"
                                     tabIndex={0}
                                     title={`${swatchIndex + 1}: ${hex}`}
-                                    aria-label={`Set ${target} color to ${hex}`}
+                                    aria-label={`Set foreground color to ${hex}`}
                                     style={{
                                         backgroundColor: hex,
                                         width: swatchSize,
@@ -190,11 +171,11 @@ export function ClassicSwatches() {
                                         marginRight: columnIndex === row.length - 1 ? 0 : SWATCH_GAP,
                                         marginBottom: rowIndex === rows.length - 1 ? 0 : SWATCH_GAP
                                     }}
-                                    onClick={() => applyHex(hex)}
+                                    onClick={() => applySwatch(hex)}
                                     onKeyDown={event => {
                                         if (event.key === "Enter" || event.key === " ") {
                                             event.preventDefault();
-                                            applyHex(hex);
+                                            applySwatch(hex);
                                         }
                                     }}
                                 />
@@ -203,41 +184,6 @@ export function ClassicSwatches() {
                     </div>
                 ))}
             </div>
-
-            <footer className="swatch-controls">
-                <div className="target-toggle" aria-label="Color target">
-                    <button
-                        className={`target-button${target === "foreground" ? " is-active" : ""}`}
-                        type="button"
-                        title="Set foreground color"
-                        onClick={() => changeTarget("foreground")}
-                    >
-                        F
-                    </button>
-                    <button
-                        className={`target-button${target === "background" ? " is-active" : ""}`}
-                        type="button"
-                        title="Set background color"
-                        onClick={() => changeTarget("background")}
-                    >
-                        B
-                    </button>
-                </div>
-                <input
-                    className="hex-input"
-                    value={hexInput}
-                    spellCheck="false"
-                    aria-label="Hex color"
-                    onChange={event => setHexInput(event.target.value.toUpperCase())}
-                    onKeyDown={event => {
-                        if (event.key === "Enter") applyHex(event.currentTarget.value);
-                    }}
-                />
-                <button className="apply-button" type="button" title="Apply typed hex color" onClick={() => applyHex(hexInput)}>
-                    Apply
-                </button>
-            </footer>
-            <div className="swatch-status" aria-live="polite">{status}</div>
         </main>
     );
 }

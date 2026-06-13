@@ -23,4 +23,4 @@ npm run watch
 
 ## Behavior
 
-The panel renders 124 swatches in a fixed 16-column grid. Clicking a swatch sets the Photoshop foreground color by default. Use `F` or `B` to switch between foreground and background, or type a hex value and press Enter or `Apply`.
+The panel renders 124 swatches in a fixed 16-column grid. Clicking a swatch immediately sets the Photoshop foreground color.
