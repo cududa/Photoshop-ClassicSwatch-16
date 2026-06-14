@@ -63,6 +63,30 @@ function getRows(values) {
     return rows;
 }
 
+async function copyTextToClipboard(value) {
+    if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(value);
+        return;
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+
+    try {
+        if (!document.execCommand("copy")) {
+            throw new Error("Copy command was unavailable");
+        }
+    } finally {
+        document.body.removeChild(textarea);
+    }
+}
+
 async function setForegroundColor(hex) {
     const photoshop = require("photoshop");
     const { app, core, action } = photoshop;
@@ -105,7 +129,9 @@ async function setForegroundColor(hex) {
 
 export function ClassicSwatches() {
     const gridRef = useRef(null);
+    const copiedTimeoutRef = useRef(null);
     const [swatchSize, setSwatchSize] = useState(12);
+    const [copiedSwatchIndex, setCopiedSwatchIndex] = useState(null);
     const rows = getRows(SWATCHES);
 
     useEffect(() => {
@@ -133,6 +159,12 @@ export function ClassicSwatches() {
         };
     }, []);
 
+    useEffect(() => () => {
+        if (copiedTimeoutRef.current) {
+            clearTimeout(copiedTimeoutRef.current);
+        }
+    }, []);
+
     async function applySwatch(value) {
         const normalized = normalizeHex(value);
 
@@ -148,6 +180,31 @@ export function ClassicSwatches() {
         }
     }
 
+    async function copySwatch(value, swatchIndex) {
+        const normalized = normalizeHex(value);
+
+        if (!normalized) {
+            console.warn(`Invalid swatch color: ${value}`);
+            return;
+        }
+
+        try {
+            await copyTextToClipboard(normalized);
+            setCopiedSwatchIndex(swatchIndex);
+
+            if (copiedTimeoutRef.current) {
+                clearTimeout(copiedTimeoutRef.current);
+            }
+
+            copiedTimeoutRef.current = setTimeout(() => {
+                setCopiedSwatchIndex(null);
+                copiedTimeoutRef.current = null;
+            }, 900);
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
     return (
         <main className="classic-swatches">
             <div className="swatch-grid" ref={gridRef} aria-label="Classic Photoshop swatches">
@@ -158,12 +215,12 @@ export function ClassicSwatches() {
 
                             return (
                                 <div
-                                    className="swatch"
+                                    className={`swatch${copiedSwatchIndex === swatchIndex ? " copied" : ""}`}
                                     key={`${hex}-${swatchIndex}`}
                                     role="button"
                                     tabIndex={0}
-                                    title={`${swatchIndex + 1}: ${hex}`}
-                                    aria-label={`Set foreground color to ${hex}`}
+                                    title={copiedSwatchIndex === swatchIndex ? `Copied ${hex}` : `${swatchIndex + 1}: ${hex}`}
+                                    aria-label={`Set foreground color to ${hex}; right click copies hex value`}
                                     style={{
                                         backgroundColor: hex,
                                         width: swatchSize,
@@ -171,7 +228,15 @@ export function ClassicSwatches() {
                                         marginRight: columnIndex === row.length - 1 ? 0 : SWATCH_GAP,
                                         marginBottom: rowIndex === rows.length - 1 ? 0 : SWATCH_GAP
                                     }}
-                                    onClick={() => applySwatch(hex)}
+                                    onClick={event => {
+                                        if (event.button !== 0) return;
+                                        applySwatch(hex);
+                                    }}
+                                    onContextMenu={event => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        copySwatch(hex, swatchIndex);
+                                    }}
                                     onKeyDown={event => {
                                         if (event.key === "Enter" || event.key === " ") {
                                             event.preventDefault();
