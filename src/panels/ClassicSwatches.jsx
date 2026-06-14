@@ -47,6 +47,35 @@ function hexToRgb(hex) {
     };
 }
 
+function rgbToActionColor(rgb) {
+    return {
+        _obj: "RGBColor",
+        red: rgb.red,
+        grain: rgb.green,
+        blue: rgb.blue
+    };
+}
+
+function createSolidColor(app, rgb) {
+    if (!app || !app.SolidColor) return null;
+
+    const color = new app.SolidColor();
+    color.rgb.red = rgb.red;
+    color.rgb.green = rgb.green;
+    color.rgb.blue = rgb.blue;
+
+    return color;
+}
+
+function getFirstActiveLayer(app) {
+    try {
+        if (!app || !app.activeDocument || !app.activeDocument.activeLayers) return null;
+        return app.activeDocument.activeLayers[0] || null;
+    } catch (error) {
+        return null;
+    }
+}
+
 function getSwatchSize(containerWidth) {
     const availableWidth = Math.max(0, containerWidth - GRID_INSET_WIDTH - (SWATCH_GAP * (COLUMN_COUNT - 1)));
 
@@ -87,44 +116,92 @@ async function copyTextToClipboard(value) {
     }
 }
 
-async function setForegroundColor(hex) {
+async function setForegroundColor(app, action, rgb) {
+    const color = createSolidColor(app, rgb);
+
+    if (color) {
+        app.foregroundColor = color;
+        return;
+    }
+
+    if (!action || !action.batchPlay) {
+        throw new Error("Photoshop color APIs are unavailable");
+    }
+
+    await action.batchPlay([
+        {
+            _obj: "set",
+            _target: [{ _ref: "color", _property: "foregroundColor" }],
+            to: rgbToActionColor(rgb)
+        }
+    ], { synchronousExecution: true });
+}
+
+async function setActiveTextColor(app, action, rgb) {
+    if (!action || !action.batchPlay) return false;
+
+    try {
+        await action.batchPlay([
+            {
+                _obj: "set",
+                _target: [
+                    { _ref: "property", _property: "textStyle" },
+                    { _ref: "textLayer", _enum: "ordinal", _value: "targetEnum" }
+                ],
+                to: {
+                    _obj: "textStyle",
+                    color: rgbToActionColor(rgb)
+                }
+            }
+        ], { synchronousExecution: true });
+        return true;
+    } catch (error) {
+        const activeLayer = getFirstActiveLayer(app);
+        const color = createSolidColor(app, rgb);
+
+        if (!activeLayer || !activeLayer.textItem || !activeLayer.textItem.characterStyle || !color) {
+            return false;
+        }
+
+        activeLayer.textItem.characterStyle.color = color;
+        return true;
+    }
+}
+
+async function setActiveShapeFillColor(action, rgb) {
+    if (!action || !action.batchPlay) return false;
+
+    try {
+        await action.batchPlay([
+            {
+                _obj: "set",
+                _target: [{ _ref: "contentLayer", _enum: "ordinal", _value: "targetEnum" }],
+                to: {
+                    _obj: "solidColorLayer",
+                    color: rgbToActionColor(rgb)
+                }
+            }
+        ], { synchronousExecution: true });
+        return true;
+    } catch (error) {
+        return false;
+    }
+}
+
+async function applyPhotoshopColor(hex) {
     const photoshop = require("photoshop");
     const { app, core, action } = photoshop;
     const rgb = hexToRgb(hex);
 
-    if (app && app.SolidColor && core && core.executeAsModal) {
-        try {
-            await core.executeAsModal(() => {
-                const color = new app.SolidColor();
-                color.rgb.red = rgb.red;
-                color.rgb.green = rgb.green;
-                color.rgb.blue = rgb.blue;
-                app.foregroundColor = color;
-            }, { commandName: "Classic Swatches: set foreground color" });
-            return;
-        } catch (error) {
-            console.warn("SolidColor failed, trying batchPlay", error);
-        }
-    }
-
-    if (!action || !action.batchPlay || !core || !core.executeAsModal) {
-        throw new Error("Photoshop color APIs are unavailable");
+    if (!core || !core.executeAsModal) {
+        throw new Error("Photoshop modal API is unavailable");
     }
 
     await core.executeAsModal(async () => {
-        await action.batchPlay([
-            {
-                _obj: "set",
-                _target: [{ _ref: "color", _property: "foregroundColor" }],
-                to: {
-                    _obj: "RGBColor",
-                    red: rgb.red,
-                    green: rgb.green,
-                    blue: rgb.blue
-                }
-            }
-        ], { synchronousExecution: true, modalBehavior: "fail" });
-    }, { commandName: "Classic Swatches: set foreground color" });
+        await setForegroundColor(app, action, rgb);
+        await setActiveTextColor(app, action, rgb);
+        await setActiveShapeFillColor(action, rgb);
+    }, { commandName: "Classic Swatches: apply color" });
 }
 
 export function ClassicSwatches() {
@@ -174,7 +251,7 @@ export function ClassicSwatches() {
         }
 
         try {
-            await setForegroundColor(normalized);
+            await applyPhotoshopColor(normalized);
         } catch (error) {
             console.error(error);
         }
@@ -232,6 +309,7 @@ export function ClassicSwatches() {
                                         if (event.button !== 0) return;
                                         applySwatch(hex);
                                     }}
+                                    onMouseDown={event => event.preventDefault()}
                                     onContextMenu={event => {
                                         event.preventDefault();
                                         event.stopPropagation();
