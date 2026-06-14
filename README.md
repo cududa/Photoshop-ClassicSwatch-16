@@ -1,4 +1,4 @@
-# Classic 16 Swatches
+# Classic Swatches
 
 Photoshop UXP panel that recreates the compact classic swatch picker layout with 16 swatches per full row. The panel is built from the Photoshop UXP React scaffold and renders the swatches through the scaffolded `entrypoints.setup` panel flow.
 
@@ -23,4 +23,4 @@ npm run watch
 
 ## Behavior
 
-The panel renders 124 swatches in a fixed 16-column grid. Clicking a swatch immediately sets the Photoshop foreground color.
+The panel renders 122 swatches in a fixed 16-column grid. Clicking a swatch immediately sets the Photoshop foreground color. Right clicking a swatch copies it's hex value to your clipboard.

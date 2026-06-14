@@ -1,6 +1,6 @@
 {
-  "id": "com.cullendudas.classic16swatches",
-  "name": "Classic 16 Swatches",
+  "id": "607df51e",
+  "name": "Classic Swatches",
   "version": "1.0.0",
   "main": "index.html",
   "manifestVersion": 5,
@@ -15,9 +15,9 @@
   "entrypoints": [
     {
       "type": "panel",
-      "id": "classic16SwatchesPanel",
+      "id": "cSwatchesPanel",
       "label": {
-        "default": "Classic 16 Swatches"
+        "default": "CSwatches"
       },
       "minimumSize": {
         "width": 144,
